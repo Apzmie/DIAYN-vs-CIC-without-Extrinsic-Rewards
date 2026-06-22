@@ -360,7 +360,7 @@ if __name__ == "__main__":
     total_steps = 0
     update_count = 0
     save_idx = 0
-    best_test_reward = -float('inf')
+    best_test_socre = -float('inf')
     current_z = {}
     
     while True:
@@ -418,54 +418,48 @@ if __name__ == "__main__":
              
              if update_count % test_interval == 0:
                  print(f"Update Count {update_count}")
-                 test_env.reset()
-                 t_decision_steps, _ = test_env.get_steps(t_behavior_name)
-                 n_test_agents = len(t_decision_steps.agent_id)
-                 test_rewards = np.zeros(n_test_agents)
-                 test_episode_dones = np.zeros(n_test_agents, dtype=bool)
-                 test_id_to_index = {agent_id: i for i, agent_id in enumerate(t_decision_steps.agent_id)}
-                 
-                 test_max_step_count = 0
-                 while not np.all(test_episode_dones) and test_max_step_count < test_max_step:
-                     t_agent_ids = t_decision_steps.agent_id
-                     
-                     if len(t_agent_ids) > 0:
-                         t_states_tensor = torch.from_numpy(t_decision_steps.obs[0]).to(torch.float32)                        
-                         with torch.no_grad():
-                             t_actions = agent.actor.deterministic(t_states_tensor)                    
-                         t_actions = t_actions.cpu().numpy().astype(np.float32)
-                         
-                         for j, agent_id in enumerate(t_agent_ids):
-                             idx = test_id_to_index[agent_id]
-                             if test_episode_dones[idx]:
-                                 t_actions[j] = np.zeros(action_dim)
-                                
-                         test_env.set_actions(t_behavior_name, ActionTuple(continuous=t_actions))
-                         
-                     test_env.step()
-                     test_max_step_count += 1
-                     t_decision_steps, t_terminal_steps = test_env.get_steps(t_behavior_name)
-                     
-                     for j, agent_id in enumerate(t_terminal_steps.agent_id):
-                         i = test_id_to_index[agent_id]
-                         if not test_episode_dones[i]:
-                             test_rewards[i] += t_terminal_steps.reward[j]
-                             test_episode_dones[i] = True
+                 test_states = {z: [] for z in range(z_dim)}
 
-                     for j, agent_id in enumerate(t_decision_steps.agent_id):
-                         i = test_id_to_index[agent_id]
-                         if not test_episode_dones[i]:
-                             test_rewards[i] += t_decision_steps.reward[j]
+                 for z in range(z_dim):
+                     test_env.reset()
+                     collected = 0
+                     
+                     while collected < 500:
+                         t_decision_steps, _ = test_env.get_steps(t_behavior_name)
+                         t_agent_ids = t_decision_steps.agent_id
+                         if len(t_agent_ids) > 0:
+                             t_states_tensor = torch.from_numpy(t_decision_steps.obs[0]).to(torch.float32) 
+                             tz_tensor = torch.zeros((len(t_agent_ids), z_dim), dtype=torch.float32)
+                             tz_tensor[:, z] = 1.0                        
+                             with torch.no_grad():
+                                 t_actions = agent.actor.deterministic(t_states_tensor, tz_tensor)                    
+                             t_actions = t_actions.cpu().numpy().astype(np.float32)
+                             test_env.set_actions(t_behavior_name, ActionTuple(continuous=t_actions))
                              
-                 test_average_reward = np.mean(test_rewards)
-                 writer.add_scalar("Test/Average_Reward", test_average_reward, update_count)
-                 print(f"{test_average_reward:.4f}")
+                             for s in t_states_tensor:
+                                 if collected >= 500:
+                                     break
+                                 test_states[z].append(s.copy())
+                                 collected += len(t_agent_ids)
+                         
+                         test_env.step()
+                 
+                 tz_means = {}
+                 for z in range(z_dim):                         
+                     tz_means[z] = np.mean(np.array(test_states[z]), axis=0)
+                 
+                 means = np.stack([tz_means[z] for z in range(z_dim)])
+                 global_mean = np.mean(means, axis=0)
+                 distance_score = np.mean(np.linalg.norm(means - global_mean, axis=1))
+             
+                 writer.add_scalar("Test/distance_score", distance_score, update_count)
+                 print(f"{distance_score:.4f}")
                  torch.save(agent.actor.state_dict(), f"{BASE_DIR}/period_model.pth")
                  save_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)                    
                          
-                 if test_average_reward > best_test_reward:
-                     best_test_reward = test_average_reward
+                 if distance_score > best_test_score:
+                     best_test_score = distance_score
                      save_idx += 1
-                     torch.save(agent.actor.state_dict(), f"{BASE_DIR}/#({save_idx})best_{best_test_reward:.4f}.pth") 
-                     print(f"[Test] Model saved at new best reward {best_test_reward:.4f}")
+                     torch.save(agent.actor.state_dict(), f"{BASE_DIR}/#({save_idx})best_{best_test_score:.4f}.pth") 
+                     print(f"[Test] Model saved at new best score {best_test_score:.4f}")
                      
