@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter       
 
-BASE_DIR = ""
+BASE_DIR = "/home/psh/Two/a"
 
 
 class PolicyNetwork(nn.Module):
@@ -148,9 +148,6 @@ class SACAgent:
         self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), lr=lr)
         self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), lr=lr)
         self.disc_optimizer = torch.optim.Adam(self.discriminator.parameters(), lr=lr)
-
-        self.log_alpha = nn.Parameter(torch.zeros(1))  #
-        self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
         
         self.target_entropy = -action_dim
         self.gamma = 0.99
@@ -177,6 +174,7 @@ class SACAgent:
         next_state = torch.FloatTensor(batch['next_state'])
         done = torch.FloatTensor(batch['done'])
         z = torch.FloatTensor(batch["z"])
+        alpha = 0.1
         
         #==========================================
 
@@ -202,8 +200,7 @@ class SACAgent:
             next_q1 = self.critic1_target(next_state, next_action, z)
             next_q2 = self.critic2_target(next_state, next_action, z)
             next_q = torch.min(next_q1, next_q2)
-            
-            alpha = self.log_alpha.exp()            
+                       
             target_q = total_reward + self.gamma * (1 - done) * (next_q - alpha * next_log_prob)
             
         q1 = self.critic1(state, action, z)
@@ -235,7 +232,6 @@ class SACAgent:
         q2_new = self.critic2(state, action_new, z)
         q_new = torch.min(q1_new, q2_new)
         
-        alpha = self.log_alpha.exp().detach()    
         actor_loss = -(q_new - alpha * log_prob).mean()
         
         self.actor_optimizer.zero_grad()
@@ -248,14 +244,6 @@ class SACAgent:
             p.requires_grad = True
         
         #==========================================
-
-        alpha_loss = -(self.log_alpha * (log_prob + self.target_entropy).detach()).mean()
-
-        self.alpha_optimizer.zero_grad()
-        alpha_loss.backward()
-        self.alpha_optimizer.step()
-        
-        #==========================================
         
         self.update_target(self.critic1, self.critic1_target)
         self.update_target(self.critic2, self.critic2_target)
@@ -264,7 +252,6 @@ class SACAgent:
             "discriminator_loss": disc_loss.item(),
             "critic1_loss": critic1_loss.item(),
             "critic2_loss": critic2_loss.item(),
-            "alpha": self.log_alpha.exp().item(),
             "intrinsic_reward": intrinsic_reward.mean().item(),
             "total_reward": total_reward.mean().item()
         }
@@ -283,9 +270,6 @@ def save_checkpoint(path, agent, buffer):
         "critic1_optimizer": agent.critic1_optimizer.state_dict(),
         "critic2_optimizer": agent.critic2_optimizer.state_dict(),
         "disc_optimizer": agent.disc_optimizer.state_dict(),
-        "alpha_optimizer": agent.alpha_optimizer.state_dict(),
-
-        "log_alpha": agent.log_alpha.detach().cpu(),
 
         "replay_buffer": {
             "state": buffer.state,
@@ -314,10 +298,6 @@ def load_checkpoint(path, agent, buffer):
     agent.critic1_optimizer.load_state_dict(ckpt["critic1_optimizer"])
     agent.critic2_optimizer.load_state_dict(ckpt["critic2_optimizer"])
     agent.disc_optimizer.load_state_dict(ckpt["disc_optimizer"])
-    agent.alpha_optimizer.load_state_dict(ckpt["alpha_optimizer"])
-    
-    with torch.no_grad():
-        agent.log_alpha.copy_(ckpt["log_alpha"])
 
     buffer.state = ckpt["replay_buffer"]["state"]
     buffer.action = ckpt["replay_buffer"]["action"]
@@ -352,15 +332,14 @@ if __name__ == "__main__":
     # Set random_exploration_steps, learning_starts to 0
     #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)
     
-    random_exploration_steps = 10000
-    learning_starts = 5000
+    random_exploration_steps = 0
+    learning_starts = 256
     test_interval = 1000
-    test_max_step = 1000
     
     total_steps = 0
     update_count = 0
     save_idx = 0
-    best_test_socre = -float('inf')
+    best_test_score = -float('inf')
     current_z = {}
     
     while True:
@@ -439,8 +418,8 @@ if __name__ == "__main__":
                              for s in t_states_tensor:
                                  if collected >= 500:
                                      break
-                                 test_states[z].append(s.copy())
-                                 collected += len(t_agent_ids)
+                                 test_states[z].append(s.detach().cpu().numpy())
+                                 collected += 1
                          
                          test_env.step()
                  
