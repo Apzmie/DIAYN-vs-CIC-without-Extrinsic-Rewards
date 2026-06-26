@@ -144,6 +144,40 @@ class SACAgent:
         
         #==========================================
         
+        ###########################################
+        ### Load one DIAYN skill without z_dim input ###
+        ###########################################
+        
+        #state_dict = torch.load(f"{BASE_DIR}/previous_model.pth")
+        
+        #z_dim = ?
+        #z = torch.zeros(z_dim)
+        #z[?] = 1.0
+        
+        #old_weight = state_dict["fc1.weight"]
+        #old_bias = state_dict["fc1.bias"]
+        
+        #state_weight = old_weight[:, :state_dim]
+        #z_weight = old_weight[:, state_dim:]
+        
+        #new_bias = old_bias + z_weight @ z
+        
+        #with actor.no_grad():
+        #    self.model.fc1.weight.copy_(state_weight)
+        #    self.model.fc1.bias.copy_(new_bias)
+        
+        #self.actor.fc2.load_state_dict({
+        #    "weight": state_dict["fc2.weight"],
+        #    "bias": state_dict["fc2.bias"]
+        #})
+
+        #self.actor.mean.load_state_dict({
+        #    "weight": state_dict["mean.weight"],
+        #    "bias": state_dict["mean.bias"]
+        #})
+        
+        #==========================================
+        
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
         self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), lr=lr)
         self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), lr=lr)
@@ -350,11 +384,13 @@ if __name__ == "__main__":
     writer = SummaryWriter(log_dir=BASE_DIR)
     
     # Set random_exploration_steps, learning_starts to 0
-    #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)
+    #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)    
+    #agent.actor.load_state_dict(torch.load(f"{BASE_DIR}/previous_model.pth"))
     
     random_exploration_steps = 0
     learning_starts = 256
     test_interval = 1000
+    max_collected = 5000
     
     total_steps = 0
     update_count = 0
@@ -423,7 +459,7 @@ if __name__ == "__main__":
                      test_env.reset()
                      collected = 0
                      
-                     while collected < 500:
+                     while collected < max_collected:
                          t_decision_steps, _ = test_env.get_steps(t_behavior_name)
                          t_agent_ids = t_decision_steps.agent_id
                          if len(t_agent_ids) > 0:
@@ -436,7 +472,7 @@ if __name__ == "__main__":
                              test_env.set_actions(t_behavior_name, ActionTuple(continuous=t_actions))
                              
                              for s in t_states_tensor:
-                                 if collected >= 500:
+                                 if collected >= max_collected:
                                      break
                                  test_states[z].append(s.detach().cpu().numpy())
                                  collected += 1
