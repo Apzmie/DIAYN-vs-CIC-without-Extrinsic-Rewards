@@ -384,7 +384,8 @@ if __name__ == "__main__":
     writer = SummaryWriter(log_dir=BASE_DIR)
     
     # Set random_exploration_steps, learning_starts to 0
-    #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)    
+    #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)
+    
     #agent.actor.load_state_dict(torch.load(f"{BASE_DIR}/previous_model.pth"))
     
     random_exploration_steps = 0
