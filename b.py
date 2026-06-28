@@ -225,7 +225,6 @@ class SACAgent:
         return {
             "critic1_loss": critic1_loss.item(),
             "critic2_loss": critic2_loss.item(),
-            "actor_loss": actor_loss.item(),
             "alpha": self.log_alpha.exp().item(),
         }
 
@@ -308,6 +307,8 @@ if __name__ == "__main__":
     # Set random_exploration_steps, learning_starts to 0
     #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)
     
+    #agent.actor.load_state_dict(torch.load(f"{BASE_DIR}/previous_model.pth"))
+    
     random_exploration_steps = 10000
     learning_starts = 5000
     test_interval = 1000
@@ -318,7 +319,7 @@ if __name__ == "__main__":
     total_steps = 0
     update_count = 0
     save_idx = 0
-    best_test_reward = -float('inf')
+    best_test_distance = float('inf')
     one_episode = {}
     
     while True:
@@ -392,18 +393,20 @@ if __name__ == "__main__":
                  test_env.reset()
                  t_decision_steps, _ = test_env.get_steps(t_behavior_name)
                  n_test_agents = len(t_decision_steps.agent_id)
-                 test_rewards = np.zeros(n_test_agents)
                  test_episode_dones = np.zeros(n_test_agents, dtype=bool)
                  test_id_to_index = {agent_id: i for i, agent_id in enumerate(t_decision_steps.agent_id)}
+                 test_distances = np.zeros(n_test_agents)
                  
                  test_max_step_count = 0
                  while not np.all(test_episode_dones) and test_max_step_count < test_max_step:
                      t_agent_ids = t_decision_steps.agent_id
                      
                      if len(t_agent_ids) > 0:
-                         t_states_tensor = torch.from_numpy(t_decision_steps.obs[0]).to(torch.float32)                        
+                         t_states_tensor = torch.from_numpy(t_decision_steps.obs[0]).to(torch.float32)  
+                         goal_batch = goal.repeat(len(t_agent_ids), 1)
+                                               
                          with torch.no_grad():
-                             t_actions = agent.actor.deterministic(t_states_tensor)                    
+                             t_actions = agent.actor.deterministic(t_states_tensor, goal_batch)                    
                          t_actions = t_actions.cpu().numpy().astype(np.float32)
                          
                          for j, agent_id in enumerate(t_agent_ids):
@@ -420,23 +423,20 @@ if __name__ == "__main__":
                      for j, agent_id in enumerate(t_terminal_steps.agent_id):
                          i = test_id_to_index[agent_id]
                          if not test_episode_dones[i]:
-                             test_rewards[i] += t_terminal_steps.reward[j]
                              test_episode_dones[i] = True
-
-                     for j, agent_id in enumerate(t_decision_steps.agent_id):
-                         i = test_id_to_index[agent_id]
-                         if not test_episode_dones[i]:
-                             test_rewards[i] += t_decision_steps.reward[j]
                              
-                 test_average_reward = np.mean(test_rewards)
-                 writer.add_scalar("Test/Average_Reward", test_average_reward, update_count)
-                 print(f"{test_average_reward:.4f}")
+                             final_tstate = t_terminal_steps.obs[0][j]
+                             test_distances[i] = np.linalg.norm(final_tstate[-goal_dim:] - goal.numpy())
+                             
+                 test_average_distance = np.mean(test_distances)
+                 writer.add_scalar("Test/Average_Distance", test_average_distance, update_count)
+                 print(f"{test_average_distance:.4f}")
                  torch.save(agent.actor.state_dict(), f"{BASE_DIR}/period_model.pth")
                  save_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)                    
                          
-                 if test_average_reward > best_test_reward:
-                     best_test_reward = test_average_reward
+                 if test_average_distance < best_test_distance:
+                     best_test_distance = test_average_distance
                      save_idx += 1
-                     torch.save(agent.actor.state_dict(), f"{BASE_DIR}/#({save_idx})best_{best_test_reward:.4f}.pth") 
-                     print(f"[Test] Model saved at new best reward {best_test_reward:.4f}")
+                     torch.save(agent.actor.state_dict(), f"{BASE_DIR}/#({save_idx})best_{best_test_distance:.4f}.pth") 
+                     print(f"[Test] Model saved at new best distance {best_test_distance:.4f}")
                      
