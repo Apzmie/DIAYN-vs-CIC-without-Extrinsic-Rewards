@@ -162,7 +162,7 @@ class SACAgent:
         
         #new_bias = old_bias + z_weight @ z
         
-        #with actor.no_grad():
+        #with torch.no_grad():
         #    self.model.fc1.weight.copy_(state_weight)
         #    self.model.fc1.bias.copy_(new_bias)
         
