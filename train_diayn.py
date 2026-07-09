@@ -117,7 +117,7 @@ class ReplayBuffer:
         
         
 class SACAgent:
-    def __init__(self, state_dim, action_dim, z_dim, diayn_obs_dim, lr=3e-4):
+    def __init__(self, state_dim, action_dim, z_dim, lr=3e-4):
         self.actor = PolicyNetwork(state_dim, action_dim, z_dim)
         self.critic1 = QNetwork(state_dim, action_dim, z_dim)
         self.critic2 = QNetwork(state_dim, action_dim, z_dim)
@@ -125,30 +125,30 @@ class SACAgent:
         self.critic2_target = QNetwork(state_dim, action_dim, z_dim)
         self.critic1_target.load_state_dict(self.critic1.state_dict())
         self.critic2_target.load_state_dict(self.critic2.state_dict())
-        self.discriminator = Discriminator(diayn_obs_dim, z_dim)
+        self.discriminator = Discriminator(state_dim, z_dim)
         
         ###########################################
         ### Load Actor (fc1, fc2, mean) ###
         # Set random_exploration_steps to 0, learning_starts to the minimum
         ###########################################
         
-        state_dict = torch.load(f"{BASE_DIR}/add_observ(ppo).pth")
+        #state_dict = torch.load(f"{BASE_DIR}/previous_model.pth")
         
-        self.actor.fc2.load_state_dict({"weight": state_dict["fc2.weight"], "bias": state_dict["fc2.bias"]})
-        self.actor.mean.load_state_dict({"weight": state_dict["mean.weight"], "bias": state_dict["mean.bias"]})       
+        #self.actor.fc2.load_state_dict({"weight": state_dict["fc2.weight"], "bias": state_dict["fc2.bias"]})
+        #self.actor.mean.load_state_dict({"weight": state_dict["mean.weight"], "bias": state_dict["mean.bias"]})       
         
-        old_weight = state_dict["fc1.weight"]
-        old_bias = state_dict["fc1.bias"]
+        #old_weight = state_dict["fc1.weight"]
+        #old_bias = state_dict["fc1.bias"]
 
-        with torch.no_grad():
-            self.actor.fc1.weight.zero_()
-            self.actor.fc1.weight[:, :old_weight.shape[1]] = old_weight
-            self.actor.fc1.bias.copy_(old_bias)
+        #with torch.no_grad():
+        #    self.actor.fc1.weight.zero_()
+        #    self.actor.fc1.weight[:, :old_weight.shape[1]] = old_weight
+        #    self.actor.fc1.bias.copy_(old_bias)
             
-        with torch.no_grad():        
-            self.actor.log_std.weight.zero_()
-            self.actor.log_std.bias.fill_(-2)        
-        self.log_alpha = nn.Parameter(torch.tensor([-9.0]))
+        #with torch.no_grad():        
+        #    self.actor.log_std.weight.zero_()
+        #    self.actor.log_std.bias.fill_(-2)        
+        #self.log_alpha = nn.Parameter(torch.tensor([-9.0]))
         
         #==========================================
         
@@ -191,14 +191,13 @@ class SACAgent:
         self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), lr=lr)
         self.disc_optimizer = torch.optim.Adam(self.discriminator.parameters(), lr=lr)
 
-        #self.log_alpha = nn.Parameter(torch.zeros(1))  #
+        self.log_alpha = nn.Parameter(torch.zeros(1))  #
         self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
         
         self.target_entropy = -action_dim
         self.gamma = 0.99
         self.tau = 0.005
         self.z_dim = z_dim
-        self.diayn_obs_dim = diayn_obs_dim
         
     def sample_z(self):
         idx = np.random.randint(self.z_dim)
@@ -223,8 +222,7 @@ class SACAgent:
         
         #==========================================
 
-        disc_state = next_state[:, -self.diayn_obs_dim:]
-        disc_logits = self.discriminator(disc_state)
+        disc_logits = self.discriminator(next_state)
         skill = z.argmax(dim=-1)
         disc_loss = F.cross_entropy(disc_logits, skill)  # include softmax
         
@@ -388,9 +386,8 @@ if __name__ == "__main__":
     spec = env.behavior_specs[behavior_name]
     state_dim = spec.observation_specs[0].shape[0]
     action_dim = spec.action_spec.continuous_size    
-    z_dim = 8
-    diayn_obs_dim = 2
-    agent = SACAgent(state_dim, action_dim, z_dim, diayn_obs_dim)
+    z_dim = 16
+    agent = SACAgent(state_dim, action_dim, z_dim)
     buffer = ReplayBuffer(state_dim, action_dim, z_dim)
     writer = SummaryWriter(log_dir=BASE_DIR)
     
@@ -409,7 +406,7 @@ if __name__ == "__main__":
     save_idx = 0
     best_test_score = -float('inf')
     current_z = {}
-    
+
     while True:
         decision_steps, terminal_steps = env.get_steps(behavior_name)
 
@@ -422,7 +419,7 @@ if __name__ == "__main__":
                 if agent_id not in current_z:
                     current_z[agent_id] = agent.sample_z()
                 z_batch.append(current_z[agent_id])
-            z_tensor = torch.tensor(np.array(z_batch), dtype=torch.float32)
+            z_tensor = torch.tensor(np.array(z_batch), dtype=torch.float32) 
             
             if total_steps < random_exploration_steps:
                 actions = np.random.uniform(low=-1.0, high=1.0, size=(len(agent_ids), action_dim)).astype(np.float32)
