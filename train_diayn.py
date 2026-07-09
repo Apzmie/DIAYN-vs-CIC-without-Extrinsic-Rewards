@@ -232,7 +232,8 @@ class SACAgent:
         self.disc_optimizer.step()
         
         with torch.no_grad():
-            log_q = F.log_softmax(disc_logits, dim=-1)
+            new_logits = self.discriminator(next_state)
+            log_q = F.log_softmax(new_logits, dim=-1)
             intrinsic_reward = (log_q.gather(1, skill.unsqueeze(1)) - np.log(1 / self.z_dim))
             total_reward = reward + intrinsic_reward
         
