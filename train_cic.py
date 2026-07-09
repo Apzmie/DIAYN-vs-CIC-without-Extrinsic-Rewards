@@ -6,9 +6,9 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter      
 import os
-import json  
+import json   
 
 BASE_DIR = ""
 
@@ -95,7 +95,7 @@ class KeyNetwork(nn.Module):
                 
 
 class ReplayBuffer:
-    def __init__(self, state_dim, action_dim, z_dim=64, max_size=int(1e6), batch_size=256):
+    def __init__(self, state_dim, action_dim, z_dim=16, max_size=int(1e6), batch_size=256):
         self.max_size = max_size
         self.batch_size = batch_size
         self.ptr = 0
@@ -133,7 +133,7 @@ class ReplayBuffer:
         
         
 class SACAgent:
-    def __init__(self, state_dim, action_dim, z_dim=64, lr=3e-4):
+    def __init__(self, state_dim, action_dim, z_dim=16, lr=3e-4):
         self.actor = PolicyNetwork(state_dim, action_dim, z_dim)
         self.critic1 = QNetwork(state_dim, action_dim, z_dim)
         self.critic2 = QNetwork(state_dim, action_dim, z_dim)
@@ -143,65 +143,6 @@ class SACAgent:
         self.critic2_target.load_state_dict(self.critic2.state_dict())
         self.query_net = QueryNetwork(z_dim)
         self.key_net = KeyNetwork(state_dim)
-        
-        ###########################################
-        ### Load Actor (fc1, fc2, mean) ###
-        # Set random_exploration_steps to 0, learning_starts to the minimum
-        ###########################################
-        
-        #state_dict = torch.load(f"{BASE_DIR}/add_observ(ppo).pth")
-        
-        #self.actor.fc2.load_state_dict({"weight": state_dict["fc2.weight"], "bias": state_dict["fc2.bias"]})
-        #self.actor.mean.load_state_dict({"weight": state_dict["mean.weight"], "bias": state_dict["mean.bias"]})       
-        
-        #old_weight = state_dict["fc1.weight"]
-        #old_bias = state_dict["fc1.bias"]
-
-        #with torch.no_grad():
-        #    self.actor.fc1.weight.zero_()
-        #    self.actor.fc1.weight[:, :old_weight.shape[1]] = old_weight
-        #    self.actor.fc1.bias.copy_(old_bias)
-            
-        #with torch.no_grad():        
-        #    self.actor.log_std.weight.zero_()
-        #    self.actor.log_std.bias.fill_(-2)        
-        #self.log_alpha = nn.Parameter(torch.tensor([-9.0]))
-        
-        #==========================================
-        
-        ###########################################
-        ### Load one DIAYN skill without z_dim input ###
-        ###########################################
-        
-        #state_dict = torch.load(f"{BASE_DIR}/previous_model.pth")
-        
-        #z_dim = ?
-        #z = torch.zeros(z_dim)
-        #z[?] = 1.0
-        
-        #old_weight = state_dict["fc1.weight"]
-        #old_bias = state_dict["fc1.bias"]
-        
-        #state_weight = old_weight[:, :state_dim]
-        #z_weight = old_weight[:, state_dim:]
-        
-        #new_bias = old_bias + z_weight @ z
-        
-        #with torch.no_grad():
-        #    self.model.fc1.weight.copy_(state_weight)
-        #    self.model.fc1.bias.copy_(new_bias)
-        
-        #self.actor.fc2.load_state_dict({
-        #    "weight": state_dict["fc2.weight"],
-        #    "bias": state_dict["fc2.bias"]
-        #})
-
-        #self.actor.mean.load_state_dict({
-        #    "weight": state_dict["mean.weight"],
-        #    "bias": state_dict["mean.bias"]
-        #})
-        
-        #==========================================
         
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
         self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), lr=lr)
@@ -218,8 +159,7 @@ class SACAgent:
         self.z_dim = z_dim
         
     def sample_z(self):
-        z = np.random.randn(self.z_dim).astype(np.float32)
-        z = z / (np.linalg.norm(z) + 1e-8) 
+        z = np.random.uniform(0, 1, self.z_dim)
         return torch.tensor(z, dtype=torch.float32)
     
     def update_target(self, net, target_net):
@@ -229,7 +169,7 @@ class SACAgent:
                     self.tau * param + (1 - self.tau) * target_param
                 )
                 
-    def cic(self, state, next_state, z, temp=0.1):
+    def cic_loss(self, state, next_state, z, temp=0.1):
         tau = torch.cat([state, next_state], dim=1)
                 
         query = self.query_net(z)
@@ -242,7 +182,7 @@ class SACAgent:
         labels = torch.arange(logits.shape[0])
         
         loss = F.cross_entropy(logits, labels)
-        return loss, logits
+        return loss
 
     def update(self, batch):
         state = torch.FloatTensor(batch['state'])
@@ -254,19 +194,37 @@ class SACAgent:
         
         #==========================================
         
-        cic_loss, logits = self.cic(state, next_state, z)
+        cic_loss = self.cic_loss(state, next_state, z)
 
         self.cic_optimizer.zero_grad()
         cic_loss.backward()
         torch.nn.utils.clip_grad_norm_(list(self.query_net.parameters()) + list(self.key_net.parameters()), 1.0)
         self.cic_optimizer.step()
         
-        with torch.no_grad():            
-            pos = logits.diagonal()
-            neg = logits.mean(dim=1)
+        with torch.no_grad():     
+            tau = torch.cat([state, next_state], dim=1)
+            key = self.key_net(tau)
+            key = F.normalize(key, dim=1)  
+                      
+            dist = torch.cdist(key, key, p=2)
+            dist.fill_diagonal_(float("inf"))
             
-            intrinsic_reward = (pos - neg).unsqueeze(1)
-            total_reward = reward + intrinsic_reward
+            k = 5
+            knn_dist, _ = torch.topk(dist, k=k, largest=False)
+            intrinsic_reward = torch.log(knn_dist.mean(dim=1) + 1e-6)
+            total_reward = reward + 0.1 * intrinsic_reward.unsqueeze(1)
+        
+        #with torch.no_grad():
+        #    tau = torch.cat([state, next_state], dim=1)              
+        #    query = self.query_net(z)
+        #    key = self.key_net(tau)       
+        #    query = F.normalize(query, dim=1)
+        #    key = F.normalize(key, dim=1)       
+        #    logits = torch.matmul(query, key.T) / 0.1            
+        #    pos = logits.diagonal()
+        #    neg = logits.mean(dim=1)           
+        #    intrinsic_reward = (pos - neg).unsqueeze(1)
+        #    total_reward = reward + intrinsic_reward
         
         #==========================================
         
@@ -420,12 +378,12 @@ if __name__ == "__main__":
     # Set random_exploration_steps, learning_starts to 0
     #load_checkpoint(f"{BASE_DIR}/checkpoint.pth", agent, buffer)    
     
-    #agent.actor.load_state_dict(torch.load(f"{BASE_DIR}/previous_model.pth"))
+    #agent.actor.load_state_dict(torch.load(f"{BASE_DIR}/previous_model.pth"))    
     #z = agent.sample_z()
-    #z_history = {"z": z.cpu().numpy().tolist()}   
-    #save_path = os.path.join(BASE_DIR, "z_global.json")
-    #with open(save_path, "w") as f:
-    #    json.dump(z_history, f)
+    #z_history = {"z": z.cpu().numpy().tolist()}        
+    #save_path = os.path.join(BASE_DIR, "z_history.txt")
+    #with open(save_path, "a") as f:
+    #    f.write(str(z_history["z"]) + "\n")   
     
     random_exploration_steps = 0
     learning_starts = 256
@@ -452,7 +410,6 @@ if __name__ == "__main__":
                     current_z[agent_id] = agent.sample_z()
                 z_batch.append(current_z[agent_id])
             z_tensor = torch.stack(z_batch).float()
-            #z_tensor = z.unsqueeze(0).repeat(len(agent_ids), 1)
             
             if total_steps < random_exploration_steps:
                 actions = np.random.uniform(low=-1.0, high=1.0, size=(len(agent_ids), action_dim)).astype(np.float32)
