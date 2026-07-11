@@ -3,3 +3,12 @@ Implementing reward functions that lead to desired behaviors in reinforcement le
 
 In my implementation, both DIAYN and CIC use SAC as the backbone because they are methods that use additional loss functions and intrinsic rewards with the backbone algorithm, and SAC is selected due to its strong exploration capability among the algorithms I have implemented so far. DIAYN is based on the paper [*DIVERSITY IS ALL YOU NEED: LEARNING SKILLS WITHOUT A REWARD FUNCTION*](https://arxiv.org/pdf/1802.06070), and CIC is based on the paper [*CIC: Contrastive Intrinsic Control for Unsupervised Skill Discovery*](https://arxiv.org/pdf/2202.00161).
 
+## Skill, Loss and Intrinsic Reward
+
+### Diayn
+The discrete skill z is represented as a one-hot vector to treat each skill as an independent category without any numerical order. The objective is to predict the correct skill when given the next state. The next state is input to the discriminator network, which outputs logits for all possible skills. These logits are converted into probabilities using softmax, and the negative log probability of the correct skill is minimized to optimize the discriminator.
+
+
+### CIC
+The continuous skill z is represented as a vector containing random values between 0 and 1.
+
