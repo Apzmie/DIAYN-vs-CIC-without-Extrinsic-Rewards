@@ -7,7 +7,7 @@ In my implementation, both DIAYN and CIC use SAC as the backbone because they ar
 ![diayn_cic](images/diayn_cic.png)
 
 ### DIAYN
-The discrete skill z is represented as a one-hot vector to treat each skill as an independent category without any numerical order. The objective is to predict the correct skill when given the next state. The next state is input to the discriminator network, which outputs logits for all possible skills. These logits are converted into probabilities using softmax, and the negative log probability of the correct skill is minimized to optimize the discriminator.
+The discrete skill z is represented as a one-hot vector to treat each skill as an independent category without any numerical order. The objective of the discriminator is to predict the correct skill when given a specific next state. Because the true probability of the correct skill given the specific next state is unknown before training, it is denoted as q instead of p. The next state is input to the discriminator network, which outputs logits for all possible skills so that softmax can be applied. The negative sign for matching the optimization direction, and the log for simplifying optimization.
 
 ### CIC
 The continuous skill z is represented as a vector containing random values between 0 and 1.
