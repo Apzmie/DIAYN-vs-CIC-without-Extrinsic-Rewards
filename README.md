@@ -7,10 +7,10 @@ In my implementation, both DIAYN and CIC use SAC as the backbone because they ar
 ![diayn_cic](images/diayn_cic.png)
 
 ### DIAYN
-The discrete skill z is represented as a one-hot vector to treat each skill as an independent category without any numerical order. The objective of the discriminator is to predict the correct skill when given a specific next state. Because the true probability of the correct skill given the specific next state is unknown before training, it is denoted as q instead of p. The next state is input to the discriminator network, which outputs logits for all possible skills so that softmax can be applied. Because it is desirable for each skill to show different behaviors by making the skill prediction accurate, intrinsic reward is just the loss function with the sign reversed. The probability of selecting z is included because, in theory, it seems to be intended to make all skills equally selected. However, in the actual implementation, it only acts as a constant that shifts the reward baseline.
+The discrete skill z is represented as a one-hot vector. The objective of the discriminator is to predict the correct skill when given a specific next state. Because the true probability of the correct skill given the specific next state is unknown before training, it is denoted as q instead of p. The next state is input to the discriminator network, which outputs logits for all possible skills so that softmax can be applied. Because it is desirable for each skill to show different behaviors by making the skill prediction accurate, intrinsic reward is just the loss function with the sign reversed. The probability of selecting z is included because, in theory, it seems to be intended to make all skills equally selected. However, in the actual implementation, it only acts as a constant that shifts the reward baseline.
 
 ### CIC
-The continuous skill z is represented as a vector containing random values between 0 and 1.
+The continuous skill z is represented as a vector containing random values between 0 and 1. z is input to the query network to output a query embedding, which provides a more meaningful representation. The concatenation of the state and next state, which captures state changes, is input to the key network as well. To compute similarity, L2 normalization is applied to make the vector magnitude equal to 1, so that similarity depends only on the direction.
 
 ## DIAYN Plot
 ![diayn_plot](images/diayn_plot.png)
