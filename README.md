@@ -14,7 +14,12 @@ The continuous skill z is represented as a vector containing random values betwe
 
 intrinsic reward uses subtraction instead of dot product between key embeddings because it seems that comparing the distance between key embedding vectors rather than their directions encourages states to become more distinguishable. L2 norm is used twice: one is to make the vector magnitude equal to 1, and the other is to measure the distance between two vectors, so the purposes are different. If all distances are summed, the distances to faraway neighbors can dominate, leading to weak learning signals. Therefore, only the k nearest neighbors are selected to maximize the distances between the current embedding and the k nearest neighbors.
 
+## Removal of z_dim Input after Training
+
+
 ## DIAYN Plot
 ![diayn_plot](images/diayn_plot.png)
 
-The training converged quickly, which is considered that even small behavioral differences between each z generate immediate rewards, enabling the agent to quickly distinguish different states for each skill. The reason why the distance score no longer increases significantly despite the continuous increase in intrinsic reward is considered to be that the skill differences have already been sufficiently established, and the learning process has shifted from discovering new diversity to improving the distinction of existing skills. Because the intrinsic reward is the discriminator loss with a different sign and shifted baseline, the two graphs are entirely opposite.
+The training converged quickly, which is considered that even small behavioral differences between each skill generate immediate rewards, enabling the agent to quickly distinguish different states for each skill. The reason why the distance score no longer increases significantly despite the continuous increase in intrinsic reward is considered to be that the skill differences have already been sufficiently established, and the learning process has shifted from discovering new diversity to improving the distinction of existing skills. Because the intrinsic reward is the discriminator loss with a different sign and shifted baseline, the two graphs are entirely opposite.
+
+## Conclusion
