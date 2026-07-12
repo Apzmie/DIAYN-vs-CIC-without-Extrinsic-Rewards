@@ -14,10 +14,12 @@ The continuous skill z is represented as a vector containing random values betwe
 
 intrinsic reward uses subtraction instead of dot product between key embeddings because it seems that comparing the distance between key embedding vectors rather than their directions encourages states to become more distinguishable. L2 norm is used twice: one is to make the vector magnitude equal to 1, and the other is to measure the distance between two vectors, so the purposes are different. If all distances are summed, the distances to faraway neighbors can dominate, leading to weak learning signals. Therefore, only the k nearest neighbors are selected to maximize the distances between the current embedding and the k nearest neighbors.
 
-## Removal of z_dim Input after Training
+## Removal of Skill Input after Training
+![removal](images/removal.png)
 
+After training, a skill vector must be added to the input of the policy network in order to select and execute the desired skill. However, this increases the observation dimension, making management more difficult and increasing the number of parameters that need to be learned. The solution is to treat the weights corresponding to the skill vector and its input values as constants, include them in the bias of the hidden nodes, and remove the skill vector from the input of the policy network. This is possible because the skill vector input remains fixed during inference, so modifying the parameters before inference allows the desired skill to be performed without the skill vector input.
 
-## DIAYN Plot
+## Training Progress (DIAYN plot)
 ![diayn_plot](images/diayn_plot.png)
 
 The training converged quickly, which is considered that even small behavioral differences between each skill generate immediate rewards, enabling the agent to quickly distinguish different states for each skill. The reason why the distance score no longer increases significantly despite the continuous increase in intrinsic reward is considered to be that the skill differences have already been sufficiently established, and the learning process has shifted from discovering new diversity to improving the distinction of existing skills. Because the intrinsic reward is the discriminator loss with a different sign and shifted baseline, the two graphs are entirely opposite.
