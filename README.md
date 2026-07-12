@@ -16,3 +16,5 @@ intrinsic reward uses subtraction instead of dot product between key embeddings 
 
 ## DIAYN Plot
 ![diayn_plot](images/diayn_plot.png)
+
+The training converged quickly, which is considered that even small behavioral differences between each z generate immediate rewards, enabling the agent to quickly distinguish different states for each skill. The reason why the distance score no longer increases significantly despite the continuous increase in intrinsic reward is considered to be that the skill differences have already been sufficiently established, and the learning process has shifted from discovering new diversity to improving the distinction of existing skills. Because the intrinsic reward is the discriminator loss with a different sign and shifted baseline, the two graphs are entirely opposite.
